@@ -1,0 +1,17 @@
+{
+  "name": "radio-room",
+  "module": "server/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot server/index.ts",
+    "start": "bun server/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "bun-types": "^1.3.13"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
