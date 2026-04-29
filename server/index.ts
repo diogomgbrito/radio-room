@@ -2,20 +2,32 @@ import type { ServerWebSocket } from "bun";
 import type { ClientMessage, ServerMessage } from "./types";
 import { resolveUrl } from "./services/link-resolver";
 import { initDb } from "./services/db";
+import { routeMessage, handleDisconnect, type WSData } from "./ws/handlers";
 
 // Initialize database
 initDb();
 
-const connectedClients = new Set<ServerWebSocket>();
+const connectedClients = new Set<ServerWebSocket<WSData>>();
 
-const server = Bun.serve({
+function broadcast(message: ServerMessage, excludeWs?: ServerWebSocket<WSData>) {
+  const text = JSON.stringify(message);
+  for (const client of connectedClients) {
+    if (client !== excludeWs && client.readyState === 1) {
+      client.send(text);
+    }
+  }
+}
+
+const server = Bun.serve<WSData>({
   port: 3000,
   async fetch(req, server) {
     const url = new URL(req.url);
 
     // WebSocket upgrade
     if (url.pathname === "/ws") {
-      const success = server.upgrade(req);
+      const success = server.upgrade(req, {
+        data: { userId: "" } as WSData,
+      });
       if (!success) {
         return new Response("WebSocket upgrade failed", { status: 500 });
       }
@@ -59,22 +71,23 @@ const server = Bun.serve({
     return new Response(file);
   },
   websocket: {
-    open(ws: ServerWebSocket) {
+    open(ws: ServerWebSocket<WSData>) {
       connectedClients.add(ws);
       console.log(`[ws] client connected (${connectedClients.size} total)`);
     },
-    message(ws: ServerWebSocket, message: string | Buffer) {
+    message(ws: ServerWebSocket<WSData>, message: string | Buffer) {
       try {
         const parsed: ClientMessage = JSON.parse(
-          typeof message === "string" ? message : message.toString()
+          typeof message === "string" ? message : message.toString(),
         );
         console.log("[ws] received:", parsed.type);
-        // TODO: handle messages in tasks 4 & 5
+        routeMessage(ws, parsed, broadcast);
       } catch {
         console.warn("[ws] invalid message received");
       }
     },
-    close(ws: ServerWebSocket) {
+    close(ws: ServerWebSocket<WSData>) {
+      handleDisconnect(ws, broadcast);
       connectedClients.delete(ws);
       console.log(`[ws] client disconnected (${connectedClients.size} total)`);
     },
