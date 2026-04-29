@@ -35,3 +35,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # SQLite database
 data/
+node_modules/
+test-results/
+playwright-report/
+blob-report/
