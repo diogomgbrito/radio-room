@@ -1,5 +1,68 @@
 <!DOCTYPE html>
-<html>
-<head><title>Radio Room</title></head>
-<body><h1>🎵 Radio Room</h1></body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radio Room</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+  <!-- Join Screen -->
+  <div id="join-screen">
+    <div class="join-card">
+      <h1>🎵 Radio Room</h1>
+      <p>Join the office music queue</p>
+      <input type="text" id="name-input" placeholder="Your name (optional)" autocomplete="off">
+      <br><br>
+      <button class="btn" id="join-btn">Join Room</button>
+    </div>
+  </div>
+
+  <!-- Room View -->
+  <div id="room-view" class="hidden">
+
+    <!-- Left: Player -->
+    <div class="player-section">
+      <div class="player-wrapper">
+        <div id="player-container"></div>
+        <div class="player-placeholder" id="player-placeholder">
+          Waiting for music...
+        </div>
+      </div>
+      <div id="now-playing" class="hidden">
+        <div class="track-title" id="np-title"></div>
+        <div class="track-artist" id="np-artist"></div>
+        <div class="track-meta" id="np-meta"></div>
+      </div>
+      <div class="skip-section">
+        <button class="btn btn-skip" id="skip-btn">⏭ Skip</button>
+        <span id="skip-count"></span>
+      </div>
+    </div>
+
+    <!-- Center: Queue -->
+    <div class="queue-section">
+      <div class="section-title">Add a song</div>
+      <div class="add-track">
+        <input type="text" id="track-input" placeholder="Paste YouTube or Spotify link...">
+        <button class="btn" id="add-btn">Add</button>
+      </div>
+      <div class="section-title">Up Next <span id="queue-count"></span></div>
+      <div id="queue-list">
+        <div class="queue-empty">Queue is empty — add a song! 🎶</div>
+      </div>
+    </div>
+
+    <!-- Right: Users -->
+    <div class="users-section">
+      <div class="section-title">Listeners</div>
+      <div class="user-count"><span class="dot"></span> <span id="user-count">0 online</span></div>
+      <div class="user-list" id="user-list"></div>
+    </div>
+
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
 </html>
