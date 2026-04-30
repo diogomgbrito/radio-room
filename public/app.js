@@ -51,13 +51,16 @@ function createPlayer() {
       videoId: "",
       playerVars: {
         autoplay: 1,
-        controls: 1,
+        controls: 0,
+        disablekb: 1,
         modestbranding: 1,
         rel: 0,
       },
       events: {
         onReady: () => {
           playerPlaceholder.classList.add("hidden");
+          // Set initial volume
+          updateVolume(Number(volumeSlider.value));
           if (pendingTrack) {
             playTrack(pendingTrack.track, pendingTrack.startedAt);
             pendingTrack = null;
@@ -245,6 +248,41 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
+
+// ── Volume Control ──
+const volumeSlider = document.getElementById("volume-slider");
+const volumeIcon = document.getElementById("volume-icon");
+let savedVolume = 80;
+
+function updateVolume(val) {
+  if (ytPlayer && typeof ytPlayer.setVolume === "function") {
+    ytPlayer.setVolume(val);
+  }
+  savedVolume = val;
+  if (val == 0) {
+    volumeIcon.textContent = "🔇";
+  } else if (val < 50) {
+    volumeIcon.textContent = "🔉";
+  } else {
+    volumeIcon.textContent = "🔊";
+  }
+}
+
+volumeSlider.addEventListener("input", (e) => {
+  updateVolume(Number(e.target.value));
+});
+
+volumeIcon.addEventListener("click", () => {
+  const current = Number(volumeSlider.value);
+  if (current > 0) {
+    savedVolume = current;
+    volumeSlider.value = 0;
+    updateVolume(0);
+  } else {
+    volumeSlider.value = savedVolume || 80;
+    updateVolume(Number(volumeSlider.value));
+  }
+});
 
 // ── Event Listeners ──
 joinBtn.addEventListener("click", () => {
