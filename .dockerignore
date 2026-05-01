@@ -1,0 +1,12 @@
+node_modules/
+data/
+test-results/
+playwright-report/
+blob-report/
+e2e/
+.git/
+.gitignore
+AGENTS.md
+CLAUDE.md
+*.md
+!README.md

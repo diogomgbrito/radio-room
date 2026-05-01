@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radio-room
+  namespace: radio-room
+  labels:
+    app: radio-room
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: radio-room
+  template:
+    metadata:
+      labels:
+        app: radio-room
+    spec:
+      containers:
+        - name: radio-room
+          image: radio-room:latest
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: radio-room-data
