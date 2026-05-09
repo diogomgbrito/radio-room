@@ -1,15 +1,23 @@
+// ═══════════════════════════════════════════════
+// Radio Room — Client (Acid Palette Design)
+// ═══════════════════════════════════════════════
+
 // ── DOM Elements ──
 const joinScreen = document.getElementById("join-screen");
 const roomView = document.getElementById("room-view");
 const nameInput = document.getElementById("name-input");
 const joinBtn = document.getElementById("join-btn");
 
+const rrPlayer = document.getElementById("rr-player");
 const playerContainer = document.getElementById("player-container");
 const playerPlaceholder = document.getElementById("player-placeholder");
 const nowPlaying = document.getElementById("now-playing");
 const npTitle = document.getElementById("np-title");
 const npArtist = document.getElementById("np-artist");
 const npMeta = document.getElementById("np-meta");
+const rrVinyl = document.getElementById("rr-vinyl");
+const progressBar = document.getElementById("progress-bar");
+
 const skipBtn = document.getElementById("skip-btn");
 const skipCount = document.getElementById("skip-count");
 
@@ -18,16 +26,30 @@ const addBtn = document.getElementById("add-btn");
 const queueList = document.getElementById("queue-list");
 const queueCount = document.getElementById("queue-count");
 
-const userList = document.getElementById("user-list");
-const userCountEl = document.getElementById("user-count");
+const currentUserName = document.getElementById("current-user-name");
+
+const listenersPill = document.getElementById("listeners-pill");
+const listenersPopover = document.getElementById("listeners-popover");
+const listenersNum = document.getElementById("listeners-num");
+const popoverCount = document.getElementById("popover-count");
+const popoverList = document.getElementById("popover-list");
+
+const volumeSlider = document.getElementById("volume-slider");
+const volumeBtn = document.getElementById("volume-btn");
+const volumeWave1 = document.getElementById("volume-wave1");
+const volumeWave2 = document.getElementById("volume-wave2");
 
 // ── State ──
 let userId = "";
+let myName = "Anonymous";
 let ws = null;
 let ytPlayer = null;
 let pendingTrack = null;
 let reconnectDelay = 1000;
 let canVoteSkip = true;
+let savedVolume = 80;
+let popoverOpen = false;
+let allUserNames = [];
 
 // ── YouTube IFrame API Loader ──
 function loadYouTubeAPI() {
@@ -59,7 +81,7 @@ function createPlayer() {
       events: {
         onReady: () => {
           playerPlaceholder.classList.add("hidden");
-          // Set initial volume
+          rrPlayer.classList.add("glowing");
           updateVolume(Number(volumeSlider.value));
           if (pendingTrack) {
             playTrack(pendingTrack.track, pendingTrack.startedAt);
@@ -68,14 +90,31 @@ function createPlayer() {
           resolve();
         },
         onStateChange: (event) => {
-          // Video ended
           if (event.data === window.YT.PlayerState.ENDED) {
             send({ type: "track_ended" });
+          }
+          // Update progress bar on play
+          if (event.data === window.YT.PlayerState.PLAYING) {
+            startProgressUpdate();
           }
         },
       },
     });
   });
+}
+
+let progressInterval = null;
+function startProgressUpdate() {
+  if (progressInterval) clearInterval(progressInterval);
+  progressInterval = setInterval(() => {
+    if (!ytPlayer || typeof ytPlayer.getCurrentTime !== "function") return;
+    const current = ytPlayer.getCurrentTime();
+    const duration = ytPlayer.getDuration();
+    if (duration > 0) {
+      const pct = (current / duration) * 100;
+      progressBar.style.width = pct + "%";
+    }
+  }, 500);
 }
 
 function playTrack(track, startedAt) {
@@ -89,10 +128,13 @@ function playTrack(track, startedAt) {
   playerPlaceholder.classList.add("hidden");
 
   // Update now playing
-  nowPlaying.classList.remove("hidden");
   npTitle.textContent = track.title;
   npArtist.textContent = track.artist;
   npMeta.textContent = `Added by ${track.addedBy} · via ${track.source}`;
+  rrVinyl.classList.add("spinning");
+  rrPlayer.classList.add("glowing");
+
+  startProgressUpdate();
 }
 
 // ── WebSocket ──
@@ -133,24 +175,25 @@ function handleMessage(msg) {
   switch (msg.type) {
     case "joined":
       userId = msg.userId;
+      allUserNames = msg.users || [];
+      // Find our name — server adds us last
+      myName = allUserNames[allUserNames.length - 1] || "Anonymous";
+      currentUserName.textContent = myName;
       joinScreen.classList.add("hidden");
       roomView.classList.remove("hidden");
-      renderUsers(msg.users);
+      renderListeners(allUserNames);
       break;
 
     case "user_joined":
-      renderUsersByName(msg.name, msg.userCount);
+      if (msg.name && !allUserNames.includes(msg.name)) {
+        allUserNames.push(msg.name);
+      }
+      renderListeners(allUserNames);
       break;
 
     case "user_left":
-      renderUserCount(msg.userCount);
-      // Remove user from DOM
-      const items = userList.querySelectorAll(".user-item");
-      items.forEach((item) => {
-        if (item.textContent?.includes(msg.name)) {
-          item.remove();
-        }
-      });
+      allUserNames = allUserNames.filter((n) => n !== msg.name);
+      renderListeners(allUserNames);
       break;
 
     case "play_track":
@@ -163,10 +206,18 @@ function handleMessage(msg) {
 
     case "skip_update":
       skipCount.textContent = `${msg.votes}/${msg.needed}`;
+      skipBtn.classList.add("voted");
       break;
 
     case "track_skipped":
       skipCount.textContent = "";
+      skipBtn.classList.remove("voted");
+      npTitle.textContent = "—";
+      npArtist.textContent = "";
+      npMeta.textContent = "";
+      rrVinyl.classList.remove("spinning");
+      progressBar.style.width = "0%";
+      if (progressInterval) clearInterval(progressInterval);
       break;
 
     case "error":
@@ -177,50 +228,76 @@ function handleMessage(msg) {
 
 // ── Toast Notification ──
 function showToast(message) {
-  let toast = document.getElementById("toast");
+  let toast = document.getElementById("rr-toast");
   if (!toast) {
     toast = document.createElement("div");
-    toast.id = "toast";
-    toast.style.cssText = `
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: var(--red); color: white; padding: 12px 24px; border-radius: 8px;
-      font-size: 0.9rem; z-index: 9999; opacity: 0; transition: opacity 0.3s;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    `;
+    toast.id = "rr-toast";
+    toast.className = "rr-toast";
     document.body.appendChild(toast);
   }
   toast.textContent = message;
   toast.style.opacity = "1";
-  setTimeout(() => { toast.style.opacity = "0"; }, 3000);
+  toast.style.display = "block";
+  // Reset animation
+  toast.style.animation = "none";
+  toast.offsetHeight; // trigger reflow
+  toast.style.animation = "rr-toast-in 0.25s ease-out";
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    setTimeout(() => { toast.style.display = "none"; }, 300);
+  }, 3000);
 }
 
-// ── UI Renderers ──
-function renderUsers(names) {
-  userList.innerHTML = "";
+// ── Listeners Popover ──
+function renderListeners(names) {
+  if (!Array.isArray(names)) return;
+
+  listenersNum.textContent = names.length;
+  popoverCount.textContent = names.length;
+
+  popoverList.innerHTML = "";
   names.forEach((name) => {
-    const div = document.createElement("div");
-    div.className = "user-item";
-    div.innerHTML = `<span class="dot"></span> ${escapeHtml(name)}`;
-    userList.appendChild(div);
+    const row = document.createElement("div");
+    const isYou = name === myName || (userId && name === myName);
+    row.className = `rr-listeners-popover-row${isYou ? " you" : ""}`;
+    row.innerHTML = `<span class="name">${escapeHtml(name || "Anonymous")}</span>
+      ${isYou ? '<span style="font-family:var(--font-mono);font-size:10px;color:var(--accent);letter-spacing:0.1em">YOU</span>' : ""}`;
+    popoverList.appendChild(row);
   });
-  renderUserCount(names.length);
 }
 
-function renderUsersByName(name, count) {
-  const div = document.createElement("div");
-  div.className = "user-item";
-  div.innerHTML = `<span class="dot"></span> ${escapeHtml(name)}`;
-  userList.appendChild(div);
-  renderUserCount(count);
+function togglePopover() {
+  popoverOpen = !popoverOpen;
+  if (popoverOpen) {
+    listenersPopover.classList.remove("hidden");
+    listenersPill.classList.add("open");
+  } else {
+    listenersPopover.classList.add("hidden");
+    listenersPill.classList.remove("open");
+  }
 }
 
-function renderUserCount(count) {
-  userCountEl.textContent = `${count} online`;
-}
+// Close popover on outside click
+document.addEventListener("click", (e) => {
+  if (popoverOpen && !document.getElementById("listeners-anchor").contains(e.target)) {
+    popoverOpen = false;
+    listenersPopover.classList.add("hidden");
+    listenersPill.classList.remove("open");
+  }
+});
+
+// ── Queue Renderer ──
+const thumbTones = ["a", "b", "c", "d", "e"];
 
 function renderQueue(queue) {
   if (queue.length === 0) {
-    queueList.innerHTML = '<div class="queue-empty">Queue is empty — add a song! 🎶</div>';
+    queueList.innerHTML = `
+      <div class="rr-q-empty">
+        <div class="rr-waveform">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="rr-empty-text">Queue is empty — add a song</div>
+      </div>`;
     queueCount.textContent = "";
     return;
   }
@@ -228,43 +305,48 @@ function renderQueue(queue) {
   queueCount.textContent = `(${queue.length})`;
   queueList.innerHTML = "";
 
-  queue.forEach((track) => {
+  queue.forEach((track, i) => {
     const div = document.createElement("div");
-    div.className = "queue-item";
+    div.className = `rr-q-item${i === 0 ? " fresh" : ""}`;
+    const tone = thumbTones[i % thumbTones.length];
+
     div.innerHTML = `
-      <img src="${escapeHtml(track.thumbnailUrl)}" alt="" loading="lazy">
-      <div class="info">
-        <div class="title">${escapeHtml(track.title)}</div>
-        <div class="meta">${escapeHtml(track.artist)} · ${escapeHtml(track.addedBy)}</div>
+      <div class="rr-q-thumb${track.thumbnailUrl ? "" : " rr-q-thumb-tinted"}"
+           ${track.thumbnailUrl ? `style="background-image:url('${escapeHtml(track.thumbnailUrl)}')"` : `data-tone="${tone}"`}></div>
+      <div class="rr-q-info">
+        <div class="rr-q-title">${escapeHtml(track.title)}</div>
+        <div class="rr-q-meta">${escapeHtml(track.artist)} <span class="by">· ${escapeHtml(track.addedBy)}</span></div>
       </div>
-      <span class="source-badge">${track.source}</span>
+      <span class="rr-q-source">${track.source}</span>
     `;
     queueList.appendChild(div);
   });
 }
 
 function escapeHtml(str) {
+  if (!str) return "";
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
 }
 
 // ── Volume Control ──
-const volumeSlider = document.getElementById("volume-slider");
-const volumeIcon = document.getElementById("volume-icon");
-let savedVolume = 80;
-
 function updateVolume(val) {
   if (ytPlayer && typeof ytPlayer.setVolume === "function") {
     ytPlayer.setVolume(val);
   }
   savedVolume = val;
+
+  // Update icon
   if (val == 0) {
-    volumeIcon.textContent = "🔇";
+    volumeWave1.style.display = "none";
+    volumeWave2.style.display = "none";
   } else if (val < 50) {
-    volumeIcon.textContent = "🔉";
+    volumeWave1.style.display = "";
+    volumeWave2.style.display = "none";
   } else {
-    volumeIcon.textContent = "🔊";
+    volumeWave1.style.display = "";
+    volumeWave2.style.display = "";
   }
 }
 
@@ -272,7 +354,7 @@ volumeSlider.addEventListener("input", (e) => {
   updateVolume(Number(e.target.value));
 });
 
-volumeIcon.addEventListener("click", () => {
+volumeBtn.addEventListener("click", () => {
   const current = Number(volumeSlider.value);
   if (current > 0) {
     savedVolume = current;
@@ -287,7 +369,9 @@ volumeIcon.addEventListener("click", () => {
 // ── Event Listeners ──
 joinBtn.addEventListener("click", () => {
   const name = nameInput.value.trim();
-  send({ type: "join", name: name || "" });
+  myName = name || "Anonymous";
+  send({ type: "join", name: myName });
+  currentUserName.textContent = myName;
 });
 
 nameInput.addEventListener("keydown", (e) => {
@@ -316,10 +400,16 @@ skipBtn.addEventListener("click", () => {
   send({ type: "vote_skip" });
   canVoteSkip = false;
   skipBtn.disabled = true;
+  skipBtn.classList.add("voted");
   setTimeout(() => {
     canVoteSkip = true;
     skipBtn.disabled = false;
   }, 3000);
+});
+
+listenersPill.addEventListener("click", (e) => {
+  e.stopPropagation();
+  togglePopover();
 });
 
 // ── Init ──

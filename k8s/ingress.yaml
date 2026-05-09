@@ -4,13 +4,19 @@ metadata:
   name: radio-room
   namespace: radio-room
   annotations:
+    # WebSocket support — long-lived connections
     nginx.ingress.kubernetes.io/websocket-services: "radio-room"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - radio.example.com
+      secretName: radio-room-tls
   rules:
-    - host: radio-room.example.com
+    - host: radio.example.com
       http:
         paths:
           - path: /
