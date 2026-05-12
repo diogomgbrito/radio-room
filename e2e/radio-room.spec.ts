@@ -8,9 +8,9 @@ test.describe("Join & Connection", () => {
   test("User A joins → sees room view with 1 online and their name in listeners", async ({ browser }) => {
     const { page } = await joinAs(browser, "Alice");
 
-    await expect(page.locator("#user-count")).toHaveText("1 online");
-    await expect(page.locator("#user-list .user-item")).toHaveCount(1);
-    await expect(page.locator("#user-list .user-item")).toContainText("Alice");
+    await expect(page.locator("#listeners-num")).toHaveText("1");
+    await page.click("#listeners-pill");
+    await expect(page.locator("#popover-list")).toContainText("Alice");
 
     // Player is ready (mock fires onReady which hides placeholder)
     // No track playing yet — mock iframe has no videoId
@@ -23,10 +23,10 @@ test.describe("Join & Connection", () => {
     const { page: pageA } = await joinAs(browser, "Alice");
     const { page: pageB } = await joinAs(browser, "Bob");
 
-    await expect(pageA.locator("#user-count")).toHaveText("2 online");
-    await expect(pageB.locator("#user-count")).toHaveText("2 online");
-    await expect(pageA.locator("#user-list .user-item")).toHaveCount(2);
-    await expect(pageB.locator("#user-list .user-item")).toHaveCount(2);
+    await expect(pageA.locator("#listeners-num")).toHaveText("2");
+    await expect(pageB.locator("#listeners-num")).toHaveText("2");
+    await pageA.click("#listeners-pill");
+    await expect(pageA.locator("#popover-list")).toContainText("Bob");
 
     await closePages(pageA, pageB);
   });
@@ -37,9 +37,9 @@ test.describe("Join & Connection", () => {
 
     await closePages(pageA);
 
-    await expect(pageB.locator("#user-count")).toHaveText("1 online");
-    await expect(pageB.locator("#user-list .user-item")).toHaveCount(1);
-    await expect(pageB.locator("#user-list")).not.toContainText("Alice");
+    await expect(pageB.locator("#listeners-num")).toHaveText("1");
+    await pageB.click("#listeners-pill");
+    await expect(pageB.locator("#popover-list")).not.toContainText("Alice");
 
     await closePages(pageB);
   });
@@ -356,8 +356,8 @@ test.describe("Error Handling", () => {
     await page.fill("#track-input", "https://example.com/not-a-song");
     await page.click("#add-btn");
 
-    await expect(page.locator("#toast")).toBeVisible({ timeout: 5000 });
-    await expect(page.locator("#toast")).toContainText("Unrecognized URL");
+    await expect(page.locator("#rr-toast")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("#rr-toast")).toContainText("Unrecognized URL");
 
     await closePages(page);
   });
@@ -368,7 +368,7 @@ test.describe("Error Handling", () => {
     await page.click("#add-btn");
 
     await expect(page.locator("#queue-list")).toContainText("Queue is empty");
-    await expect(page.locator("#toast")).not.toBeVisible();
+    await expect(page.locator("#rr-toast")).not.toBeVisible();
 
     await closePages(page);
   });
