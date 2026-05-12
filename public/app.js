@@ -188,6 +188,10 @@ function handleMessage(msg) {
       currentUserName.textContent = myName;
       joinScreen.classList.add("hidden");
       roomView.classList.remove("hidden");
+      // Create YT player after room is visible (player won't init inside display:none)
+      if (!ytPlayer) {
+        loadYouTubeAPI().then(() => createPlayer());
+      }
       renderListeners(allUserNames);
       break;
 
@@ -498,4 +502,4 @@ listenersPill.addEventListener("click", (e) => {
 
 // ── Init ──
 connect();
-loadYouTubeAPI().then(() => createPlayer());
+loadYouTubeAPI();
