@@ -80,8 +80,6 @@ function createPlayer() {
       },
       events: {
         onReady: () => {
-          playerPlaceholder.classList.add("hidden");
-          rrPlayer.classList.add("glowing");
           updateVolume(Number(volumeSlider.value));
           if (pendingTrack) {
             playTrack(pendingTrack.track, pendingTrack.startedAt);
@@ -115,6 +113,11 @@ function startProgressUpdate() {
       progressBar.style.width = pct + "%";
     }
   }, 500);
+}
+
+function showPlaceholder() {
+  playerPlaceholder.classList.remove("hidden");
+  rrPlayer.classList.remove("glowing");
 }
 
 function playTrack(track, startedAt) {
@@ -222,6 +225,7 @@ function handleMessage(msg) {
       rrVinyl.classList.remove("spinning");
       progressBar.style.width = "0%";
       if (progressInterval) clearInterval(progressInterval);
+      showPlaceholder();
       break;
 
     case "error":

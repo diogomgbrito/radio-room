@@ -511,7 +511,13 @@ body {
   justify-content: center;
   gap: 18px;
   color: var(--text-muted);
-  z-index: 0;
+  z-index: 2;
+  background: linear-gradient(135deg, rgba(240, 255, 103, 0.18) 0%, var(--bg) 100%);
+  transition: opacity 0.3s ease;
+}
+.rr-player-empty.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .rr-waveform {
@@ -544,6 +550,13 @@ body {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-dim);
+}
+.rr-empty-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  opacity: 0.5;
 }
 
 /* ── Progress bar ── */
