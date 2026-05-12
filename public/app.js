@@ -45,6 +45,7 @@ let myName = "Anonymous";
 let ws = null;
 let ytPlayer = null;
 let pendingTrack = null;
+let playerReady = false;
 let reconnectDelay = 1000;
 let canVoteSkip = true;
 let savedVolume = 80;
@@ -80,6 +81,7 @@ function createPlayer() {
       },
       events: {
         onReady: () => {
+          playerReady = true;
           updateVolume(Number(volumeSlider.value));
           if (pendingTrack) {
             playTrack(pendingTrack.track, pendingTrack.startedAt);
@@ -119,13 +121,13 @@ function showPlaceholder() {
   playerPlaceholder.classList.remove("hidden");
   rrPlayer.classList.remove("glowing");
   // Stop the YouTube player when no track is playing
-  if (ytPlayer && typeof ytPlayer.stopVideo === "function") {
+  if (playerReady && ytPlayer && typeof ytPlayer.stopVideo === "function") {
     ytPlayer.stopVideo();
   }
 }
 
 function playTrack(track, startedAt) {
-  if (!ytPlayer || typeof ytPlayer.loadVideoById !== "function") {
+  if (!playerReady || !ytPlayer || typeof ytPlayer.loadVideoById !== "function") {
     pendingTrack = { track, startedAt };
     return;
   }
