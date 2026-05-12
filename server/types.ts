@@ -38,4 +38,5 @@ export type ServerMessage =
   | { type: "queue_update"; queue: Track[] }
   | { type: "play_track"; track: Track; startedAt: number }
   | { type: "skip_update"; votes: number; needed: number }
+  | { type: "skip_warning"; seconds: number; votes: number; needed: number }
   | { type: "track_skipped" };

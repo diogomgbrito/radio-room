@@ -209,6 +209,10 @@ function handleMessage(msg) {
       skipBtn.classList.add("voted");
       break;
 
+    case "skip_warning":
+      showSkipWarning(msg.seconds, msg.votes, msg.needed);
+      break;
+
     case "track_skipped":
       skipCount.textContent = "";
       skipBtn.classList.remove("voted");
@@ -246,6 +250,78 @@ function showToast(message) {
     toast.style.opacity = "0";
     setTimeout(() => { toast.style.display = "none"; }, 300);
   }, 3000);
+}
+
+// ── Skip Warning with Countdown ──
+let skipWarningInterval = null;
+
+function showSkipWarning(seconds, votes, needed) {
+  // Play notification sound
+  playNotificationSound();
+
+  // Create or get skip warning toast
+  let warningToast = document.getElementById("rr-skip-warning");
+  if (!warningToast) {
+    warningToast = document.createElement("div");
+    warningToast.id = "rr-skip-warning";
+    warningToast.className = "rr-skip-warning";
+    document.body.appendChild(warningToast);
+  }
+
+  let remaining = seconds;
+
+  // Update function
+  const updateWarning = () => {
+    warningToast.textContent = `⚠️ Track will be skipped in ${remaining}s (${votes}/${needed} votes)`;
+    warningToast.style.opacity = "1";
+    warningToast.style.display = "block";
+    warningToast.style.animation = "rr-skip-warning-in 0.3s ease-out";
+  };
+
+  // Initial update
+  updateWarning();
+
+  // Start countdown
+  if (skipWarningInterval) {
+    clearInterval(skipWarningInterval);
+  }
+
+  skipWarningInterval = setInterval(() => {
+    remaining--;
+    if (remaining > 0) {
+      updateWarning();
+    } else {
+      clearInterval(skipWarningInterval);
+      skipWarningInterval = null;
+      warningToast.style.opacity = "0";
+      setTimeout(() => { warningToast.style.display = "none"; }, 300);
+    }
+  }, 1000);
+}
+
+// ── Simple Notification Sound ──
+function playNotificationSound() {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    // Simple beep pattern: two tones
+    oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+    oscillator.frequency.setValueAtTime(600, audioCtx.currentTime + 0.1);
+
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+
+    oscillator.start(audioCtx.currentTime);
+    oscillator.stop(audioCtx.currentTime + 0.3);
+  } catch (err) {
+    // Audio context might be blocked, ignore
+    console.log("[audio] Could not play notification sound:", err);
+  }
 }
 
 // ── Listeners Popover ──

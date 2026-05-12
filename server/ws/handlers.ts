@@ -203,41 +203,55 @@ export function handleVoteSkip(
   ws: ServerWebSocket<WSData>,
   broadcast: BroadcastFn,
 ) {
-  const result = voteSkip(ws.data.userId);
+  const result = voteSkip(
+    ws.data.userId,
+    // onWarning callback - broadcasts skip_warning to all users
+    (seconds, votes, needed) => {
+      broadcast({
+        type: "skip_warning",
+        seconds,
+        votes,
+        needed,
+      });
+    },
+    // onSkip callback - executes after countdown
+    () => {
+      logActivity("track_skipped", ws.data.userName);
+
+      const room = getRoom();
+
+      if (room.currentTrack) {
+        const newTrackDbId = trackDbIdMap.get(room.currentTrack.id);
+        logActivity(
+          "track_played",
+          room.currentTrack.addedBy,
+          newTrackDbId,
+        );
+        if (newTrackDbId) {
+          incrementPlayCount(newTrackDbId);
+        }
+
+        broadcast({
+          type: "play_track",
+          track: room.currentTrack,
+          startedAt: room.currentTrackStartedAt!,
+        });
+      }
+
+      broadcast({ type: "track_skipped" });
+      broadcast({ type: "queue_update", queue: room.queue });
+    },
+    5, // countdown seconds
+  );
+
   logActivity("vote_skip_cast", ws.data.userName);
 
+  // Always broadcast skip_update to show current vote count
   broadcast({
     type: "skip_update",
     votes: result.votes,
     needed: result.needed,
   });
-
-  if (result.skipped) {
-    logActivity("track_skipped", ws.data.userName);
-
-    const room = getRoom();
-
-    if (room.currentTrack) {
-      const newTrackDbId = trackDbIdMap.get(room.currentTrack.id);
-      logActivity(
-        "track_played",
-        room.currentTrack.addedBy,
-        newTrackDbId,
-      );
-      if (newTrackDbId) {
-        incrementPlayCount(newTrackDbId);
-      }
-
-      broadcast({
-        type: "play_track",
-        track: room.currentTrack,
-        startedAt: room.currentTrackStartedAt!,
-      });
-    }
-
-    broadcast({ type: "track_skipped" });
-    broadcast({ type: "queue_update", queue: room.queue });
-  }
 }
 
 export function handleDisconnect(

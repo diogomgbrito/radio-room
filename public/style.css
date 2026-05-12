@@ -985,6 +985,44 @@ body {
   to { transform: translate(-50%, 0); opacity: 1; }
 }
 
+/* ── Skip Warning Toast (bottom right) ── */
+.rr-skip-warning {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  left: auto;
+  transform: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--orange);
+  border-left: 4px solid var(--orange);
+  border-radius: 10px;
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  z-index: 70;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(251, 146, 60, 0.3);
+  animation: rr-skip-warning-in 0.3s ease-out;
+  font-family: var(--font-body);
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+@keyframes rr-skip-warning-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .rr-skip-warning {
+    bottom: 16px;
+    right: 16px;
+    left: 16px;
+    max-width: none;
+  }
+}
+
 /* ═══════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════ */

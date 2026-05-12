@@ -54,6 +54,7 @@ export function removeUser(userId: string): string | undefined {
     room.currentTrack = null;
     room.currentTrackStartedAt = null;
     room.skipVotes.clear();
+    clearSkipTimeout();
   }
 
   return name;
@@ -106,6 +107,7 @@ export function addTrack(track: Omit<Track, "id" | "addedAt">): Readonly<Room> {
  */
 export function advanceQueue(): Track | null {
   room.skipVotes.clear();
+  clearSkipTimeout();
 
   const next = room.queue.shift() ?? null;
   room.currentTrack = next;
@@ -118,35 +120,92 @@ export function advanceQueue(): Track | null {
 // Skip voting
 // ---------------------------------------------------------------------------
 
+// Store pending skip timeout
+let skipTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Calculates the skip threshold based on user count.
+ * - ≤ 5 users: 50% threshold (majority)
+ * - > 5 users: 75% threshold (supermajority)
+ */
+function getSkipThreshold(userCount: number): number {
+  if (userCount <= 5) {
+    // 50% - need strictly more than half
+    return Math.floor(userCount / 2) + 1;
+  } else {
+    // 75% - need 3/4 of users
+    return Math.ceil(userCount * 0.75);
+  }
+}
+
+/**
+ * Clears any pending skip countdown.
+ */
+export function clearSkipTimeout(): void {
+  if (skipTimeout) {
+    clearTimeout(skipTimeout);
+    skipTimeout = null;
+  }
+}
+
+/**
+ * Checks if there's a pending skip countdown.
+ */
+export function hasPendingSkip(): boolean {
+  return skipTimeout !== null;
+}
+
 /**
  * Registers a skip vote from a user.
- * If votes exceed 50% of connected users (strictly more than half),
- * the queue auto-advances.
+ * 
+ * Threshold:
+ *   - ≤ 5 users: 50% (votes > users/2)
+ *   - > 5 users: 75% (votes ≥ users * 0.75)
+ * 
+ * When threshold is reached, broadcasts a warning with countdown,
+ * then executes skip after countdown completes.
  *
- * Threshold: votes > users.length / 2
- *   - 1 user → 1 vote triggers skip  (1 > 0.5)
- *   - 2 users → 2 votes trigger skip (2 > 1)
- *   - 3 users → 2 votes trigger skip (2 > 1.5)
- *
- * Returns { votes, needed, skipped }.
+ * Returns { votes, needed, triggered, skipped }.
+ * - triggered: true when threshold reached and countdown started
+ * - skipped: true when skip actually executed (after countdown)
  */
-export function voteSkip(userId: string): {
+export function voteSkip(
+  userId: string,
+  onWarning: (seconds: number, votes: number, needed: number) => void,
+  onSkip: () => void,
+  countdownSeconds: number = 5,
+): {
   votes: number;
   needed: number;
+  triggered: boolean;
   skipped: boolean;
 } {
+  // Don't allow new votes if countdown is already in progress
+  if (skipTimeout) {
+    const needed = getSkipThreshold(room.users.size);
+    return { votes: room.skipVotes.size, needed, triggered: false, skipped: false };
+  }
+
   room.skipVotes.add(userId);
 
   const totalUsers = room.users.size;
-  // Need strictly more than half
-  const needed = Math.floor(totalUsers / 2) + 1;
+  const needed = getSkipThreshold(totalUsers);
   const votes = room.skipVotes.size;
-  let skipped = false;
 
-  if (votes >= needed) {
-    advanceQueue();
-    skipped = true;
+  // Check if threshold reached
+  if (votes >= needed && !skipTimeout) {
+    // Broadcast warning with countdown
+    onWarning(countdownSeconds, votes, needed);
+
+    // Start countdown
+    skipTimeout = setTimeout(() => {
+      skipTimeout = null;
+      advanceQueue();
+      onSkip();
+    }, countdownSeconds * 1000);
+
+    return { votes, needed, triggered: true, skipped: false };
   }
 
-  return { votes, needed, skipped };
+  return { votes, needed, triggered: false, skipped: false };
 }
