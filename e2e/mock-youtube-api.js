@@ -54,6 +54,14 @@ window.YT = {
         : window.YT.Player.State.PAUSED;
     }
 
+    stopVideo() {
+      this._videoId = "";
+      const iframe = document.getElementById("mock-yt-player");
+      if (iframe) {
+        iframe.dataset.videoId = "";
+      }
+    }
+
     /** Simulate the video ending (called from tests via page.evaluate) */
     simulateEnd() {
       if (this._opts.events?.onStateChange) {

@@ -118,6 +118,10 @@ function startProgressUpdate() {
 function showPlaceholder() {
   playerPlaceholder.classList.remove("hidden");
   rrPlayer.classList.remove("glowing");
+  // Stop the YouTube player when no track is playing
+  if (ytPlayer && typeof ytPlayer.stopVideo === "function") {
+    ytPlayer.stopVideo();
+  }
 }
 
 function playTrack(track, startedAt) {

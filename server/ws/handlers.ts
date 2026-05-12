@@ -218,6 +218,8 @@ export function handleVoteSkip(
     () => {
       logActivity("track_skipped", ws.data.userName);
 
+      broadcast({ type: "track_skipped" });
+
       const room = getRoom();
 
       if (room.currentTrack) {
@@ -238,7 +240,6 @@ export function handleVoteSkip(
         });
       }
 
-      broadcast({ type: "track_skipped" });
       broadcast({ type: "queue_update", queue: room.queue });
     },
     5, // countdown seconds

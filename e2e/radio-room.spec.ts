@@ -182,7 +182,7 @@ test.describe("Queue Management", () => {
     await ws.waitForMessage("queue_update");
 
     await expect(page.locator("#queue-count")).toHaveText("(2)");
-    await expect(page.locator(".queue-item")).toHaveCount(2);
+    await expect(page.locator(".rr-q-item")).toHaveCount(2);
     await expect(page.locator("#now-playing")).toBeVisible();
 
     await closePages(page);
@@ -307,9 +307,9 @@ test.describe("Multi-User Join Sync", () => {
     const titleB = await pageB.locator("#np-title").textContent();
     expect(titleA).toBe(titleB);
 
-    // Both see 2 users
-    await expect(pageA.locator("#user-count")).toHaveText("2 online");
-    await expect(pageB.locator("#user-count")).toHaveText("2 online");
+// Both see 2 users
+  await expect(pageA.locator("#listeners-num")).toHaveText("2");
+  await expect(pageB.locator("#listeners-num")).toHaveText("2");
 
     await closePages(pageA);
     await contextB.close();
@@ -335,11 +335,12 @@ test.describe("Auto-Cleanup on Empty Room", () => {
     // New user joins — should see empty room
     const { page: pageB } = await joinAs(browser, "Bob");
 
-    await expect(pageB.locator("#now-playing")).toBeHidden();
+    await expect(pageB.locator("#player-placeholder")).toBeVisible();
+    await expect(pageB.locator("#np-title")).toHaveText("—");
     // Mock player is ready but has no video loaded
     await expect(pageB.locator("#mock-yt-player")).toHaveAttribute("data-video-id", "");
     await expect(pageB.locator("#queue-list")).toContainText("Queue is empty");
-    await expect(pageB.locator("#user-count")).toHaveText("1 online");
+    await expect(pageB.locator("#listeners-num")).toHaveText("1");
 
     await closePages(pageB);
   });
