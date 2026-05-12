@@ -1016,3 +1016,49 @@ body {
   .rr-q-source { display: none; }
   .rr-q-thumb { width: 56px; height: 42px; }
 }
+
+/* ═══════════════════════════════════════════════
+   BLINKING ON AIR ANIMATION
+   ═══════════════════════════════════════════════ */
+
+/* Blinking animation for the ON AIR mark */
+.blinking {
+  animation: rr-blink 1.2s ease-in-out infinite;
+}
+
+.blinking-text {
+  animation: rr-text-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes rr-blink {
+  0%, 100% { 
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% { 
+    opacity: 0.4;
+    filter: brightness(0.6);
+  }
+}
+
+@keyframes rr-text-blink {
+  0%, 100% { 
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+  }
+  50% { 
+    opacity: 0.6;
+    text-shadow: none;
+  }
+}
+
+/* Override old halo animation - use blink instead */
+.rr-onair.live .rr-onair-mark.blinking {
+  animation: rr-blink 1.2s ease-in-out infinite;
+}
+
+/* Logo mark styling */
+.rr-mark img {
+  display: block;
+  filter: drop-shadow(0 0 4px rgba(232, 168, 56, 0.4));
+}
