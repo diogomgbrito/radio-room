@@ -5,8 +5,16 @@ import { dirname } from "node:path";
 const DB_PATH = `${import.meta.dir}/../../data/radio-room.db`;
 
 let db: Database | null = null;
+let dbEnabled = false;
 
-export function initDb(): Database {
+export function initDb(): Database | null {
+  dbEnabled = process.env.ENABLE_DB === "true";
+
+  if (!dbEnabled) {
+    console.log("[db] Database disabled (set ENABLE_DB=true to enable)");
+    return null;
+  }
+
   // Ensure data/ directory exists
   mkdirSync(dirname(DB_PATH), { recursive: true });
 
@@ -48,7 +56,8 @@ export function initDb(): Database {
   return db;
 }
 
-export function getDb(): Database {
+export function getDb(): Database | null {
+  if (!dbEnabled) return null;
   if (!db) {
     throw new Error("Database not initialized. Call initDb() first.");
   }
@@ -66,8 +75,9 @@ export interface SongInput {
   addedAt: number;
 }
 
-export function logSong(track: SongInput): number {
+export function logSong(track: SongInput): number | undefined {
   const database = getDb();
+  if (!database) return undefined;
 
   const stmt = database.prepare(`
     INSERT INTO songs (youtube_id, title, artist, thumbnail_url, source, duration, added_by, added_at)
@@ -104,6 +114,7 @@ export function logActivity(
   details?: Record<string, unknown>,
 ): void {
   const database = getDb();
+  if (!database) return;
 
   const stmt = database.prepare(`
     INSERT INTO activity_log (event_type, user_name, track_id, details, created_at)
@@ -120,7 +131,9 @@ export function logActivity(
 }
 
 export function incrementPlayCount(songId: number): void {
+  if (!songId) return;
   const database = getDb();
+  if (!database) return;
 
   const stmt = database.prepare(`
     UPDATE songs SET play_count = play_count + 1 WHERE id = ?

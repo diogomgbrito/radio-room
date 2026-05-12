@@ -4,10 +4,19 @@ import { resolveUrl } from "./services/link-resolver";
 import { initDb } from "./services/db";
 import { routeMessage, handleDisconnect, type WSData } from "./ws/handlers";
 
-// Initialize database
+// Initialize database (optional — disabled by default)
 initDb();
 
 const connectedClients = new Set<ServerWebSocket<WSData>>();
+const FRONTEND_ORIGIN = process.env.FRONTEND_URL || "*";
+
+function corsHeaders(): HeadersInit {
+  return {
+    "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
 
 function broadcast(message: ServerMessage, excludeWs?: ServerWebSocket<WSData>) {
   const text = JSON.stringify(message);
@@ -19,9 +28,14 @@ function broadcast(message: ServerMessage, excludeWs?: ServerWebSocket<WSData>) 
 }
 
 const server = Bun.serve<WSData>({
-  port: 3000,
+  port: Number(process.env.PORT) || 3000,
   async fetch(req, server) {
     const url = new URL(req.url);
+
+    // Handle CORS preflight
+    if (req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
 
     // WebSocket upgrade
     if (url.pathname === "/ws") {
@@ -41,16 +55,16 @@ const server = Bun.serve<WSData>({
         if (!body.url || typeof body.url !== "string") {
           return Response.json(
             { error: "Missing or invalid 'url' field." },
-            { status: 400 },
+            { status: 400, headers: corsHeaders() },
           );
         }
 
         const resolved = await resolveUrl(body.url);
-        return Response.json(resolved);
+        return Response.json(resolved, { headers: corsHeaders() });
       } catch (err: unknown) {
         const message =
           err instanceof Error ? err.message : "Failed to resolve URL.";
-        return Response.json({ error: message }, { status: 400 });
+        return Response.json({ error: message }, { status: 400, headers: corsHeaders() });
       }
     }
 

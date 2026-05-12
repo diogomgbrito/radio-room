@@ -148,8 +148,10 @@ function playTrack(track, startedAt) {
 
 // ── WebSocket ──
 function connect() {
+  const cfg = window.RADIO_ROOM_CONFIG || {};
+  const wsHost = cfg.wsHost || location.host;
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${protocol}//${location.host}/ws`);
+  ws = new WebSocket(`${protocol}//${wsHost}/ws`);
 
   ws.onopen = () => {
     console.log("[ws] connected");

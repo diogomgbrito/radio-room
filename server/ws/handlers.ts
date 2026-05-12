@@ -134,14 +134,18 @@ export async function handleAddTrack(
         addedAt: newTrack.addedAt,
       });
 
-      trackDbIdMap.set(newTrack.id, songDbId);
+      if (songDbId) {
+        trackDbIdMap.set(newTrack.id, songDbId);
+      }
 
       logActivity("track_added", user.name, songDbId);
 
       // Track was auto-played (became currentTrack immediately)
       if (!hadCurrentTrack) {
         logActivity("track_played", user.name, songDbId);
-        incrementPlayCount(songDbId);
+        if (songDbId) {
+          incrementPlayCount(songDbId);
+        }
       }
     }
 
