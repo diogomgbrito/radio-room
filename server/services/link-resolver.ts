@@ -45,19 +45,37 @@ export async function resolveUrl(
 async function resolveYouTube(
   videoId: string,
 ): Promise<ResolvedTrack> {
-  const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+  // 1. Check embeddability — YouTube blocks embedding in two ways:
+  //    - oEmbed returns 401/403 for owner-disabled embedding
+  //    - Some videos pass oEmbed but still block in iframes (allowEmbed: false)
+  //    We check both before accepting the track.
+  const embedCheckUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+  const embedRes = await fetch(embedCheckUrl);
 
-  const res = await fetch(oembedUrl);
-  if (!res.ok) {
+  if (!embedRes.ok) {
+    if (embedRes.status === 401 || embedRes.status === 403) {
+      throw new Error(
+        "This video cannot be played — the owner has disabled embedding.",
+      );
+    }
     throw new Error(
-      `Failed to fetch YouTube metadata (HTTP ${res.status})`,
+      `Video not found or unavailable (HTTP ${embedRes.status}).`,
     );
   }
 
-  const data = (await res.json()) as {
+  const data = (await embedRes.json()) as {
     title?: string;
     author_name?: string;
   };
+
+  // 2. Extra embeddability check: scrape the video page for allowEmbed: false
+  //    This catches videos where oEmbed works but the iframe player still blocks.
+  const isEmbeddable = await checkEmbeddable(videoId);
+  if (!isEmbeddable) {
+    throw new Error(
+      "This video cannot be played — the owner has disabled embedding.",
+    );
+  }
 
   const rawTitle: string = data.title ?? "";
   const { title, artist } = parseArtistTitle(rawTitle);
@@ -69,6 +87,34 @@ async function resolveYouTube(
     thumbnailUrl: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
     source: "youtube",
   };
+}
+
+/**
+ * Check if a YouTube video allows embedding by scraping the video page.
+ * Looks for "allowEmbed":false or "playableInEmbed":false in the player response.
+ */
+async function checkEmbeddable(videoId: string): Promise<boolean> {
+  try {
+    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+    if (!pageRes.ok) return true; // can't verify — assume embeddable
+
+    const html = await pageRes.text();
+
+    // Check for explicit embed-blocking flags in ytInitialPlayerResponse
+    if (html.includes('"allowEmbed":false')) return false;
+    if (html.includes('"playableInEmbed":false')) return false;
+
+    return true;
+  } catch {
+    // Network error — assume embeddable (don't block on failure)
+    return true;
+  }
 }
 
 // --- Spotify ---
@@ -119,12 +165,17 @@ async function resolveSpotify(
     );
   }
 
-  // 3. Fetch YouTube oEmbed for full metadata
+  // 3. Fetch YouTube oEmbed for full metadata + embeddability check
   const ytOembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytVideoId}&format=json`;
 
   const ytRes = await fetch(ytOembedUrl);
   if (!ytRes.ok) {
-    // Even if oEmbed fails we still have the video ID — return what we can.
+    if (ytRes.status === 401 || ytRes.status === 403) {
+      throw new Error(
+        "The matched YouTube video cannot be played — the owner has disabled embedding.",
+      );
+    }
+    // Other errors — return what we have, let the player fail gracefully
     return {
       youtubeId: ytVideoId,
       title: songTitle,
@@ -132,6 +183,14 @@ async function resolveSpotify(
       thumbnailUrl: `https://img.youtube.com/vi/${ytVideoId}/mqdefault.jpg`,
       source: "spotify",
     };
+  }
+
+  // 4. Extra embeddability check (same as direct YouTube links)
+  const isEmbeddable = await checkEmbeddable(ytVideoId);
+  if (!isEmbeddable) {
+    throw new Error(
+      "The matched YouTube video cannot be played — the owner has disabled embedding.",
+    );
   }
 
   const ytData = (await ytRes.json()) as {
