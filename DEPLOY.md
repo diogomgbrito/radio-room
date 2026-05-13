@@ -87,23 +87,23 @@ ssh opc@dmgb-vm-1  # via Tailscale SSH (currently blocked by SELinux)
 ```
 FRONTEND_URL=https://radio-room.pages.dev
 PORT=3000
-ENABLE_DB=(unset — database disabled by default)
+ENABLE_DB=true
 ```
 
 ### Database
 
-SQLite is **disabled by default**. To enable:
+SQLite is **enabled**. All songs and activity events are persisted across restarts.
+
+Data lives in `/home/opc/radio-room/data/radio-room.db`.
+
+To **disable** the database:
 
 ```bash
 ssh -i /path/to/key opc@141.253.121.167
-sudo systemctl edit radio-room
-# Add under [Service]:
-Environment=ENABLE_DB=true
+sudo rm /etc/systemd/system/radio-room.service.d/db.conf
 sudo systemctl daemon-reload
 sudo systemctl restart radio-room
 ```
-
-Data lives in `/home/opc/radio-room/data/radio-room.db`.
 
 ---
 
@@ -269,6 +269,6 @@ sudo journalctl -u cloudflared -n 20 --no-pager | grep "trycloudflare"
 
 - Oracle Cloud Always Free VM: 1/8 OCPU + 1 GB RAM — sufficient for this app
 - Cloudflare Pages: unlimited bandwidth, free SSL
-- No database required for basic functionality (SQLite is optional)
+- SQLite database is **enabled** — songs and activity are persisted across restarts
 - The `trycloudflare.com` tunnel is free but ephemeral — the URL changes on restart
 - For production use, switch to a named Cloudflare Tunnel with a custom domain

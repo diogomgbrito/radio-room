@@ -136,7 +136,7 @@ A single Bun process (`server/index.ts`) that handles:
 2. **WebSocket connections** — real-time sync for all clients
 3. **Static file serving** — serves `public/` for local dev
 4. **URL resolution** — YouTube/Spotify link → track metadata
-5. **SQLite logging** — optional, disabled by default
+5. **SQLite logging** — enabled, persists songs and activity across restarts
 
 ### Server routes
 
@@ -279,9 +279,7 @@ CREATE TABLE activity (
 
 ### Enabled?
 
-**No.** `ENABLE_DB` is not set in `radio-room.service`, so `initDb()` returns `null` and all DB calls are no-ops. The database file does not exist on the VM.
-
-To enable it, edit the systemd service and add `Environment=ENABLE_DB=true`.
+**Yes.** `ENABLE_DB=true` is set via `/etc/systemd/system/radio-room.service.d/db.conf`. The database file exists at `/home/opc/radio-room/data/radio-room.db` and is actively logging songs and activity events.
 
 ---
 
@@ -486,6 +484,5 @@ These are **intentional or unavoidable** given the current architecture:
 2. **No HTTPS on the VM.** Cloudflare Tunnel handles TLS at the edge. Direct IP access is HTTP only.
 3. **Ephemeral tunnel URL.** `trycloudflare.com` URLs change when cloudflared restarts. `config.js` must be updated manually.
 4. **Oracle public IP is ephemeral.** Stopping the VM may change `141.253.121.167`. Tailscale IP is the stable alternative.
-5. **No persistent database.** SQLite is disabled by default. Room state is lost on restart.
-6. **SELinux blocks Tailscale SSH.** Must run `sudo setsebool -P tailscale_ssh on` to enable.
-7. **No custom domain.** This is a test project; no domain is purchased.
+5. **SELinux blocks Tailscale SSH.** Must run `sudo setsebool -P tailscale_ssh on` to enable.
+6. **No custom domain.** This is a test project; no domain is purchased.
