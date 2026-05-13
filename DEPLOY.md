@@ -1,263 +1,274 @@
 # Radio Room Deployment Guide
 
-Split deployment: **Frontend on Cloudflare Pages** + **Backend on Oracle Cloud** (Always Free).
+This is the **actual deployment** of the Radio Room project. No hypothetical setups — this is how it runs today.
+
+> **Purpose:** Radio Room is a test/learning project. It is deployed with free-tier infrastructure and an ephemeral tunnel. A custom domain is intentionally not used.
 
 ---
 
-## Architecture
+## Architecture at a Glance
 
 ```
-Cloudflare Pages          Oracle Cloud VM
-┌─────────────────┐            ┌─────────────────┐
-│  index.html       │  ←────→  │  Bun.serve()      │
-│  app.js           │   WS     │  WebSocket /ws    │
-│  style.css        │          │  API /api/resolve │
-│  config.js        │          │  Optional SQLite  │
-└─────────────────┘            └─────────────────┘
+┌─────────────────────────────┐      ┌─────────────────────────────────────────┐
+│   Cloudflare Pages          │      │   Oracle Cloud Always Free VM           │
+│   radio-room.pages.dev      │◄────►│   141.253.121.167 (ephemeral IP)        │
+│   (static HTML/JS/CSS)      │  WS  │                                         │
+└─────────────────────────────┘      │   ┌─────────────────────────────────┐   │
+                                     │   │  radio-room.service             │   │
+                                     │   │  Bun backend on localhost:3000  │   │
+                                     │   └─────────────────────────────────┘   │
+                                     │   ┌─────────────────────────────────┐   │
+                                     │   │  cloudflared.service            │   │
+                                     │   │  ephemeral tunnel to Cloudflare │   │
+                                     │   └─────────────────────────────────┘   │
+                                     │   ┌─────────────────────────────────┐   │
+                                     │   │  tailscaled.service             │   │
+                                     │   │  Tailscale agent (tailnet)      │   │
+                                     │   └─────────────────────────────────┘   │
+                                     └─────────────────────────────────────────┘
 ```
 
 ---
 
-## Prerequisites
+## Part 1: Frontend (Cloudflare Pages)
 
-- Oracle Cloud Free Tier account
-- Cloudflare account + Wrangler CLI
-- GitHub repo for the project
-- SSH key pair for Oracle VM access
+**URL:** `https://radio-room.pages.dev`
 
----
+The frontend is a static single-page app (vanilla HTML/CSS/JS) deployed to Cloudflare Pages.
 
-## Part 1: Backend (Oracle Cloud)
+### How it works
 
-### 1. Create VM
+- `public/` folder contains all frontend assets
+- `public/config.js` tells the frontend where the backend WebSocket lives
+- Deployed via Wrangler CLI (`wrangler pages deploy ./public`)
 
-1. Oracle Cloud Console → **Compute** → **Instances**
-2. Click **Create Instance**
-3. Settings:
-   - **Name:** `radio-room`
-   - **Image:** Oracle Linux 9
-   - **Shape:** `VM.Standard.E2.1.Micro` (Always Free)
-   - **Networking:** Create new VCN → **Public subnet**
-   - **Assign public IPv4 address:** ✅ **Checked**
-   - **SSH keys:** Generate new key pair, download `.key` file
-4. Click **Create**
-5. Wait ~2 min, copy the **Public IP**
-
-### 2. Open Firewall Port 3000
-
-In the Oracle Console:
-1. Go to your VCN → **Security Lists** → Default Security List
-2. Click **Add Ingress Rule**:
-   - Source CIDR: `0.0.0.0/0`
-   - Destination Port: `3000`
-   - Protocol: TCP
-
-### 3. Deploy Backend
-
-SSH into the VM (from your local machine):
+### Deploy / Update Frontend
 
 ```bash
-ssh -i /path/to/your-key.key opc@<VM_PUBLIC_IP>
-```
-
-Inside the VM:
-
-```bash
-# Install Bun
-curl -fsSL https://bun.sh/install | bash
-source ~/.bash_profile
-
-# Install Git
-sudo dnf install -y git
-
-# Clone repo
-cd ~
-git clone https://github.com/diogomgbrito/radio-room.git
 cd radio-room
-bun install
+# Edit frontend files in public/...
+# Update config.js if the tunnel URL changed
+wrangler pages deploy ./public --project-name=radio-room --branch=master
+```
 
-# Copy bun to a system path (fixes systemd permission issues)
-sudo cp ~/.bun/bin/bun /usr/local/bin/bun
-sudo chmod +x /usr/local/bin/bun
+---
 
-# Create systemd service
-sudo tee /etc/systemd/system/radio-room.service << 'EOF'
+## Part 2: Backend (Oracle Cloud VM)
+
+**Host:** Oracle Cloud Always Free Tier  
+**VM:** `VM.Standard.E2.1.Micro` (1/8 OCPU, 1 GB RAM)  
+**OS:** Oracle Linux Server 9.7  
+**Public IP:** `141.253.121.167` (ephemeral — may change on stop/start)  
+**Tailscale IP:** `100.76.254.86` (stable, never changes)  
+**Tailnet:** `cormo-mark.ts.net`
+
+### VM Access
+
+**SSH (key-based):**
+```bash
+ssh -i /path/to/radio-room-deploy.key opc@141.253.121.167
+```
+
+**Tailscale (alternative, no public IP needed):**
+```bash
+ssh opc@dmgb-vm-1  # via Tailscale SSH (currently blocked by SELinux)
+```
+
+### Services Running on the VM
+
+| Service | Role | Port | Status |
+|---------|------|------|--------|
+| `radio-room.service` | Bun backend | 3000 | `active (running)` |
+| `cloudflared.service` | Ephemeral Cloudflare Tunnel | — | `active (running)` |
+| `tailscaled.service` | Tailscale agent | 41641 | `active (running)` |
+
+### Backend Environment
+
+```
+FRONTEND_URL=https://radio-room.pages.dev
+PORT=3000
+ENABLE_DB=(unset — database disabled by default)
+```
+
+### Database
+
+SQLite is **disabled by default**. To enable:
+
+```bash
+ssh -i /path/to/key opc@141.253.121.167
+sudo systemctl edit radio-room
+# Add under [Service]:
+Environment=ENABLE_DB=true
+sudo systemctl daemon-reload
+sudo systemctl restart radio-room
+```
+
+Data lives in `/home/opc/radio-room/data/radio-room.db`.
+
+---
+
+## Part 3: Cloudflare Tunnel (Ephemeral)
+
+**Current tunnel URL:** `per-soldier-pamela-workers.trycloudflare.com`
+
+### What it is
+
+An **ephemeral** Cloudflare Tunnel created with `cloudflared tunnel --url http://localhost:3000`. It exposes the Bun backend on port 3000 to the internet via a Cloudflare-managed HTTPS URL.
+
+### Important: URL changes on restart
+
+The `trycloudflare.com` URL is **not persistent**. If `cloudflared.service` restarts, the URL changes. When this happens:
+
+1. SSH into the VM and read the new tunnel URL from logs:
+   ```bash
+   ssh opc@141.253.121.167
+   sudo journalctl -u cloudflared -n 20 --no-pager
+   ```
+
+2. Update `public/config.js` with the new `wsHost`:
+   ```js
+   window.RADIO_ROOM_CONFIG = {
+     wsHost: "new-url.trycloudflare.com",
+   };
+   ```
+
+3. Re-deploy the frontend:
+   ```bash
+   wrangler pages deploy ./public --project-name=radio-room --branch=master
+   ```
+
+### Why not a named tunnel?
+
+A named tunnel requires a custom domain. Since this project is for testing/learning and no domain is purchased, the ephemeral tunnel is the free option.
+
+### Tunnel systemd service
+
+```ini
+# /etc/systemd/system/cloudflared.service
 [Unit]
-Description=Radio Room Backend
+Description=Cloudflare Tunnel for Radio Room
 After=network.target
 
 [Service]
 Type=simple
-User=opc
-WorkingDirectory=/home/opc/radio-room
-Environment=FRONTEND_URL=https://radio-room.pages.dev
-Environment=PORT=3000
-ExecStart=/usr/local/bin/bun run server/index.ts
+User=root
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:3000
 Restart=always
-RestartSec=5
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable radio-room
-sudo systemctl start radio-room
-
-# Verify
-sudo systemctl status radio-room
-```
-
-You should see `active (running)` and `🎵 Radio Room running on http://localhost:3000`.
-
-### 4. Keep It Updated
-
-To update the backend after code changes:
-
-```bash
-ssh -i /path/to/your-key.key opc@<VM_PUBLIC_IP>
-cd ~/radio-room
-git pull
-sudo systemctl restart radio-room
 ```
 
 ---
 
-## Part 2: Frontend (Cloudflare Pages)
+## Part 4: Tailscale
 
-### 1. Install Wrangler
+**Installed:** May 13, 2026  
+**Version:** 1.96.4  
+**Tailnet:** `cormo-mark.ts.net`  
+**VM hostname:** `dmgb-vm-1`  
+**VM Tailscale IP:** `100.76.254.86`
 
-```bash
-npm install -g wrangler
-wrangler login
-```
+### Purpose
 
-### 2. Create Project
+Provides stable, private network access to the VM regardless of its public IP. Useful for SSH and direct backend access without relying on the ephemeral tunnel.
 
-```bash
-wrangler pages project create radio-room --production-branch=master
-```
+### Tailscale SSH
 
-### 3. Configure Backend URL
-
-Edit `public/config.js`:
-
-```js
-window.RADIO_ROOM_CONFIG = {
-  wsHost: "<VM_PUBLIC_IP>:3000",
-};
-```
-
-### 4. Deploy
+SELinux on Oracle Linux blocks Tailscale SSH by default. To use it:
 
 ```bash
-wrangler pages deploy ./public --project-name=radio-room --branch=master
+sudo setsebool -P tailscale_ssh on
 ```
 
-Your frontend is live at `https://radio-room.pages.dev`.
-
-### 5. Auto-deploy on Push (Optional)
-
-Connect your GitHub repo in the Cloudflare Dashboard:
-1. Pages → Create a project → Connect to Git
-2. Select your repo
-3. Build settings:
-   - **Build command:** (leave empty — static files)
-   - **Build output directory:** `public/`
-4. Every push to `master` auto-deploys
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3000` | Backend server port |
-| `FRONTEND_URL` | `*` | CORS origin (set to your Pages domain) |
-| `ENABLE_DB` | *(unset)* | Set to `"true"` to enable SQLite logging |
-
----
-
-## Database (Optional)
-
-SQLite is **disabled by default**. Set `ENABLE_DB=true` to persist songs and activity.
-
-- **Without DB:** All features work. Room state is in-memory only.
-- **With DB:** Songs and activity are logged across restarts.
-
-To enable:
+Then access the VM from any tailnet device:
 ```bash
-sudo systemctl edit radio-room
-# Add:
-[Service]
-Environment=ENABLE_DB=true
+ssh opc@dmgb-vm-1
 ```
 
 ---
 
 ## Updating After Code Changes
 
-### Frontend only:
-```bash
-cd radio-room
-# edit code...
-git push origin master
-# Cloudflare auto-deploys if Git integration is set up
-# OR manually:
-wrangler pages deploy ./public --project-name=radio-room
-```
+### Update backend only
 
-### Backend only:
 ```bash
-ssh -i /path/to/your-key.key opc@<VM_PUBLIC_IP>
+ssh -i /path/to/key opc@141.253.121.167
 cd ~/radio-room
 git pull
 sudo systemctl restart radio-room
 ```
 
-### Both:
+### Update frontend only
+
 ```bash
 cd radio-room
-git push origin master
-wrangler pages deploy ./public --project-name=radio-room
-ssh -i /path/to/your-key.key opc@<VM_PUBLIC_IP> "cd ~/radio-room && git pull && sudo systemctl restart radio-room"
+# Edit files...
+wrangler pages deploy ./public --project-name=radio-room --branch=master
+```
+
+### Update both
+
+```bash
+cd radio-room
+git push github master   # push to GitHub
+git push origin master   # push to Brilean GitLab
+
+# Deploy frontend
+wrangler pages deploy ./public --project-name=radio-room --branch=master
+
+# Deploy backend
+ssh -i /path/to/key opc@141.253.121.167 "cd ~/radio-room && git pull && sudo systemctl restart radio-room"
 ```
 
 ---
 
 ## Troubleshooting
 
-### Backend won't start (systemd)
+### Backend won't start
 ```bash
+ssh opc@141.253.121.167
 sudo journalctl -u radio-room -n 50 --no-pager
 ```
 
+### Tunnel URL changed
+```bash
+ssh opc@141.253.121.167
+sudo journalctl -u cloudflared -n 20 --no-pager | grep "trycloudflare"
+# Update public/config.js and re-deploy frontend
+```
+
 ### WebSocket connection fails
-- Check firewall: port 3000 must be open in Oracle Security List
-- Check CORS: `FRONTEND_URL` must match your Pages domain
-- Check `config.js`: `wsHost` must be `IP:3000` (not just IP)
+- Check that `config.js` `wsHost` matches the current tunnel URL
+- Check `FRONTEND_URL` env var matches `radio-room.pages.dev`
+- Check `cloudflared.service` is running
 
 ### Frontend shows "Connecting..."
 - Backend might be down: `sudo systemctl status radio-room`
-- VM might have changed IP after restart (Oracle ephemeral IPs)
-- Update `config.js` and re-deploy if IP changed
+- Tunnel URL may have changed (see above)
+- Check browser console for mixed-content errors (HTTP vs HTTPS)
 
 ---
 
-## Current Deployment
+## Current Deployment Snapshot
 
 | Component | URL / Endpoint |
 |-----------|---------------|
-| Frontend | `https://radio-room.pages.dev` |
-| Backend | `141.253.121.167:3000` |
-| WebSocket | `ws://141.253.121.167:3000/ws` |
-| API | `http://141.253.121.167:3000/api/resolve` |
+| Frontend (Cloudflare Pages) | `https://radio-room.pages.dev` |
+| Backend (ephemeral tunnel) | `wss://per-soldier-pamela-workers.trycloudflare.com` |
+| API resolve | `https://per-soldier-pamela-workers.trycloudflare.com/api/resolve` |
+| VM public IP | `141.253.121.167:3000` (no HTTPS, direct access) |
+| VM Tailscale IP | `100.76.254.86` (private tailnet access) |
+| GitHub repo | `https://github.com/diogomgbrito/radio-room` |
+| Brilean repo | `ssh://git@git.brilean.cloud:2424/diogo.brito/radio-room.git` |
 
 ---
 
 ## Notes
 
-- Oracle Cloud Always Free VM: 1/8 OCPU + 1GB RAM — plenty for this app
+- Oracle Cloud Always Free VM: 1/8 OCPU + 1 GB RAM — sufficient for this app
 - Cloudflare Pages: unlimited bandwidth, free SSL
-- No database required for basic functionality
-- For production SSL on the backend, add Let's Encrypt or use a reverse proxy
+- No database required for basic functionality (SQLite is optional)
+- The `trycloudflare.com` tunnel is free but ephemeral — the URL changes on restart
+- For production use, switch to a named Cloudflare Tunnel with a custom domain
